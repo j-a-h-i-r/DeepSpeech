@@ -26,8 +26,6 @@ mkdir -p ${TASKCLUSTER_TMP_DIR} || true
 export DS_TFDIR=${DS_ROOT_TASK}/DeepSpeech/tf
 export DS_DSDIR=${DS_ROOT_TASK}/DeepSpeech/ds
 
-export BAZEL_CTC_TARGETS="//native_client:libctc_decoder_with_kenlm.so"
-
 export DS_VERSION="$(cat ${DS_DSDIR}/VERSION)"
 
 model_source="${DEEPSPEECH_TEST_MODEL}"
@@ -250,11 +248,6 @@ download_native_client_files()
   generic_download_tarxz "$1" "${DEEPSPEECH_ARTIFACTS_ROOT}/native_client.tar.xz"
 }
 
-download_ctc_kenlm()
-{
-  generic_download_tarxz "$1" "${DEEPSPEECH_LIBCTC}"
-}
-
 download_data()
 {
   wget -P "${TASKCLUSTER_TMP_DIR}" "${model_source}"
@@ -262,7 +255,7 @@ download_data()
   cp ${DS_ROOT_TASK}/DeepSpeech/ds/data/smoke_test/*.wav ${TASKCLUSTER_TMP_DIR}/
   cp ${DS_ROOT_TASK}/DeepSpeech/ds/data/alphabet.txt ${TASKCLUSTER_TMP_DIR}/alphabet.txt
   cp ${DS_ROOT_TASK}/DeepSpeech/ds/data/smoke_test/vocab.pruned.lm ${TASKCLUSTER_TMP_DIR}/lm.binary
-  cp ${DS_ROOT_TASK}/DeepSpeech/ds/data/smoke_test/vocab.trie.ctcdecode ${TASKCLUSTER_TMP_DIR}/trie
+  cp ${DS_ROOT_TASK}/DeepSpeech/ds/data/smoke_test/vocab.trie ${TASKCLUSTER_TMP_DIR}/trie
 }
 
 download_material()
@@ -496,6 +489,24 @@ do_deepspeech_python_build()
 
     make -C native_client/python/ bindings-clean
 
+    # Skip building decoder in GPU builds since it's the same as the CPU version
+    if [ -z "${rename_to_gpu}" ]; then
+      # Set LD path because python ssl might require it
+      LD_LIBRARY_PATH=${PY37_LDPATH}:$LD_LIBRARY_PATH \
+      EXTRA_CFLAGS="${EXTRA_LOCAL_CFLAGS}" \
+      EXTRA_LDFLAGS="${EXTRA_LOCAL_LDFLAGS}" \
+      EXTRA_LIBS="${EXTRA_LOCAL_LIBS}" \
+      make -C native_client/ctcdecode/ \
+          TARGET=${SYSTEM_TARGET} \
+          RASPBIAN=${SYSTEM_RASPBIAN} \
+          TFDIR=${DS_TFDIR} \
+          bindings
+
+      cp native_client/ctcdecode/dist/*.whl wheels
+
+      make -C native_client/ctcdecode clean
+    fi
+
     unset NUMPY_BUILD_VERSION
     unset NUMPY_DEP_VERSION
 
@@ -580,7 +591,6 @@ package_native_client()
   if [ -f "${tensorflow_dir}/bazel-bin/native_client/libdeepspeech_model.so" ]; then
     tar -cf - \
       -C ${tensorflow_dir}/bazel-bin/native_client/ generate_trie \
-      -C ${tensorflow_dir}/bazel-bin/native_client/ libctc_decoder_with_kenlm.so \
       -C ${tensorflow_dir}/bazel-bin/native_client/ libdeepspeech.so \
       -C ${tensorflow_dir}/bazel-bin/native_client/ libdeepspeech_model.so \
       -C ${deepspeech_dir}/ LICENSE \
@@ -590,7 +600,6 @@ package_native_client()
   else
     tar -cf - \
       -C ${tensorflow_dir}/bazel-bin/native_client/ generate_trie \
-      -C ${tensorflow_dir}/bazel-bin/native_client/ libctc_decoder_with_kenlm.so \
       -C ${tensorflow_dir}/bazel-bin/native_client/ libdeepspeech.so \
       -C ${deepspeech_dir}/ LICENSE \
       -C ${deepspeech_dir}/native_client/ deepspeech \

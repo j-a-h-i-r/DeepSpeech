@@ -70,15 +70,6 @@ def parallelCCompile(self,
     return objects
 
 
-def compile_test(header, library):
-    dummy_path = os.path.join(os.path.dirname(__file__), "dummy")
-    command = "bash -c \"g++ -include " + header \
-                + " -l" + library + " -x c++ - <<<'int main() {}' -o " \
-                + dummy_path + " >/dev/null 2>/dev/null && rm " \
-                + dummy_path + " 2>/dev/null\""
-    return os.system(command) == 0
-
-
 # hack compile to support parallel compiling
 distutils.ccompiler.CCompiler.compile = parallelCCompile
 
@@ -94,24 +85,13 @@ FILES = [
         'unittest.cc'))
 ]
 
-LIBS = ['stdc++']
-if platform.system() != 'Darwin':
-    LIBS.append('rt')
-
+LIBS = []
 ARGS = ['-O3', '-DNDEBUG', '-DKENLM_MAX_ORDER=6', '-std=c++11',
         '-Wno-unused-local-typedef', '-Wno-sign-compare']
 
-if compile_test('zlib.h', 'z'):
-    ARGS.append('-DHAVE_ZLIB')
-    LIBS.append('z')
+if os.environ['TARGET'] == 'rpi3-armv8':
+    ARGS.append('-static-libstdc++')
 
-if compile_test('bzlib.h', 'bz2'):
-    ARGS.append('-DHAVE_BZLIB')
-    LIBS.append('bz2')
-
-if compile_test('lzma.h', 'lzma'):
-    ARGS.append('-DHAVE_XZLIB')
-    LIBS.append('lzma')
 
 decoder_module = Extension(
     name='ds_ctcdecoder._swigwrapper',
