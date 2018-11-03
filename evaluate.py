@@ -86,31 +86,11 @@ def calculate_report(labels, decodings, distances, losses):
     return samples_wer, samples
 
 
-def main(_):
-    initialize_globals()
-
-    if not FLAGS.test_files:
-        log_error('You need to specify what files to use for evaluation via '
-                  'the --test_files flag.')
-        exit(1)
-
-    global alphabet
-    alphabet = Alphabet(FLAGS.alphabet_config_path)
-
+def evaluate(test_data, alphabet):
     scorer = Scorer(FLAGS.lm_weight, FLAGS.valid_word_count_weight,
                     FLAGS.lm_binary_path, FLAGS.lm_trie_path,
                     alphabet)
 
-    # sort examples by length, improves packing of batches and timesteps
-    test_data = preprocess(
-        FLAGS.test_files.split(','),
-        FLAGS.test_batch_size,
-        alphabet=alphabet,
-        numcep=N_FEATURES,
-        numcontext=N_CONTEXT,
-        hdf5_cache_path=FLAGS.hdf5_test_set).sort_values(
-        by="features_len",
-        ascending=False)
 
     def create_windows(features):
         num_strides = len(features) - (N_CONTEXT * 2)
@@ -221,7 +201,35 @@ def main(_):
         print(' - res: "%s"' % sample.res)
         print('-' * 80)
 
+    return samples
+
+
+def main(_):
+    initialize_globals()
+
+    if not FLAGS.test_files:
+        log_error('You need to specify what files to use for evaluation via '
+                  'the --test_files flag.')
+        exit(1)
+
+    global alphabet
+    alphabet = Alphabet(FLAGS.alphabet_config_path)
+
+    # sort examples by length, improves packing of batches and timesteps
+    test_data = preprocess(
+        FLAGS.test_files.split(','),
+        FLAGS.test_batch_size,
+        alphabet=alphabet,
+        numcep=N_FEATURES,
+        numcontext=N_CONTEXT,
+        hdf5_cache_path=FLAGS.hdf5_test_set).sort_values(
+        by="features_len",
+        ascending=False)
+
+    samples = evaluate(test_data, alphabet)
+
     if FLAGS.test_output_file:
+        # Save decoded tuples as JSON, converting NumPy floats to Python floats
         json.dump(samples, open(FLAGS.test_output_file, 'w'), default=lambda x: float(x))
 
 
